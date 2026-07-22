@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  ANALYST
+}
+
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  restaurants Restaurant[]
+  memberships Membership[]
+  auditLogs AuditLog[]
+  createdAt DateTime @default(now())
+}
+model Restaurant {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  branches Branch[]
+  auditLogs AuditLog[]
+  @@unique([organizationId, id])
+  @@index([organizationId])
+}
+model Branch {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  restaurantId String @db.Uuid
+  name String
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  auditLogs AuditLog[]
+  @@unique([organizationId, restaurantId, id])
+  @@index([organizationId, restaurantId])
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  passwordHash String
+  memberships Membership[]
+  auditLogs AuditLog[]
+  createdAt DateTime @default(now())
+}
+model Membership {
+  userId String @db.Uuid
+  organizationId String @db.Uuid
+  role UserRole
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@id([userId, organizationId])
+}
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  restaurantId String? @db.Uuid
+  branchId String? @db.Uuid
+  actorUserId String @db.Uuid
+  action String
+  entityType String
+  entityId String?
+  metadata Json
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  @@index([organizationId, restaurantId, branchId, createdAt])
+}

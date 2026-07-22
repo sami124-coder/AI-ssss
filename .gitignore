@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-store/
+dist/
+.env
+coverage/
+apps/api/src/generated/
+*.log
