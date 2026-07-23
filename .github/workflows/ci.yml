@@ -32,13 +32,13 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
       - run: pnpm db:migrate
@@ -52,13 +52,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.9.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
