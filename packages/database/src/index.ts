@@ -7,3 +7,4 @@ export const database = globalDatabase.database ?? new PrismaClient();
 if (process.env.NODE_ENV !== 'production') globalDatabase.database = database;
 
 export * from '@prisma/client';
+export * from './tenant-repository.js';

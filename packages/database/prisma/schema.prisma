@@ -7,12 +7,862 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum MembershipRole {
+  OWNER
+  MANAGER
+  VIEWER
+}
+
+enum ImportStatus {
+  PENDING
+  VALIDATING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ImportType {
+  SALES
+  MENU
+  INGREDIENT_COSTS
+  OPERATING_COSTS
+  LABOR_COSTS
+}
+
+enum RecommendationStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RecommendationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationConfidence {
+  LOW
+  MEDIUM
+  HIGH
+  WITHHELD
+}
+
+enum OutcomeReviewType {
+  SEVEN_DAY
+  FOURTEEN_DAY
+}
+
+enum DataQualityStatus {
+  COMPLETE
+  PARTIAL
+  MISSING
+  INVALID
+}
+
+enum SalesChannelType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  IMPORT
+  EXPORT
+  ACCEPT
+  REJECT
+  COMPLETE
+}
+
 model ServiceMetadata {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique
   value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@map("service_metadata")
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("organizations")
+}
+
+model Restaurant {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  legalName      String?
+  currency       String   @db.Char(3)
+  timezone       String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("restaurants")
+}
+
+model Branch {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  name           String
+  code           String
+  address        String?
+  timezone       String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, code])
+  @@index([organizationId, restaurantId])
+  @@map("branches")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  displayName  String
+  locale       String    @default("en")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@map("users")
+}
+
+model Membership {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  restaurantId   String?        @db.Uuid
+  branchId       String?        @db.Uuid
+  userId         String         @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, userId])
+  @@index([userId])
+  @@index([organizationId, restaurantId, branchId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  restaurantId   String?        @db.Uuid
+  branchId       String?        @db.Uuid
+  email          String
+  role           MembershipRole
+  tokenHash      String         @unique
+  invitedById    String         @db.Uuid
+  expiresAt      DateTime       @db.Timestamptz(3)
+  acceptedAt     DateTime?      @db.Timestamptz(3)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, email])
+  @@map("invitations")
+}
+
+model Session {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  userId         String   @db.Uuid
+  tokenHash      String   @unique
+  expiresAt      DateTime @db.Timestamptz(3)
+  lastSeenAt     DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model SalesChannel {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  restaurantId   String           @db.Uuid
+  branchId       String?          @db.Uuid
+  name           String
+  type           SalesChannelType
+  externalId     String?
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, externalId])
+  @@index([organizationId, restaurantId, branchId])
+  @@map("sales_channels")
+}
+
+model MenuCategory {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  name           String
+  externalId     String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, externalId])
+  @@index([organizationId, restaurantId])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  categoryId     String?  @db.Uuid
+  name           String
+  sku            String?
+  externalId     String?
+  sellingPrice   Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, externalId])
+  @@unique([organizationId, restaurantId, sku])
+  @@index([organizationId, restaurantId, categoryId])
+  @@map("menu_items")
+}
+
+model MenuItemCost {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @db.Uuid
+  restaurantId     String    @db.Uuid
+  branchId         String?   @db.Uuid
+  menuItemId       String    @db.Uuid
+  amount           Decimal   @db.Decimal(19, 4)
+  currency         String    @db.Char(3)
+  effectiveFrom    DateTime  @db.Timestamptz(3)
+  effectiveTo      DateTime? @db.Timestamptz(3)
+  sourceExternalId String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, menuItemId, effectiveFrom])
+  @@index([organizationId, restaurantId, branchId, menuItemId])
+  @@map("menu_item_costs")
+}
+
+model Ingredient {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  name           String
+  unit           String
+  unitCost       Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  externalId     String?
+  effectiveAt    DateTime @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, externalId])
+  @@unique([organizationId, restaurantId, name])
+  @@index([organizationId, restaurantId])
+  @@map("ingredients")
+}
+
+model Recipe {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  menuItemId     String   @db.Uuid
+  yieldQuantity  Decimal  @default(1) @db.Decimal(18, 6)
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, menuItemId, version])
+  @@index([organizationId, restaurantId])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  recipeId       String   @db.Uuid
+  ingredientId   String   @db.Uuid
+  quantity       Decimal  @db.Decimal(18, 6)
+  unit           String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, recipeId, ingredientId])
+  @@index([organizationId, restaurantId, recipeId])
+  @@map("recipe_ingredients")
+}
+
+model Order {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  salesChannelId String?  @db.Uuid
+  externalId     String
+  orderedAt      DateTime @db.Timestamptz(3)
+  subtotal       Decimal  @db.Decimal(19, 4)
+  discountTotal  Decimal  @default(0) @db.Decimal(19, 4)
+  refundTotal    Decimal  @default(0) @db.Decimal(19, 4)
+  taxTotal       Decimal  @default(0) @db.Decimal(19, 4)
+  total          Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  sourceSystem   String
+  importBatchId  String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, sourceSystem, externalId])
+  @@index([organizationId, restaurantId, branchId, orderedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  orderId        String   @db.Uuid
+  menuItemId     String?  @db.Uuid
+  externalId     String?
+  itemName       String
+  quantity       Decimal  @db.Decimal(18, 6)
+  unitPrice      Decimal  @db.Decimal(19, 4)
+  grossAmount    Decimal  @db.Decimal(19, 4)
+  discountAmount Decimal  @default(0) @db.Decimal(19, 4)
+  netAmount      Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, orderId, externalId])
+  @@index([organizationId, restaurantId, branchId, orderId])
+  @@map("order_items")
+}
+
+model Discount {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  orderId        String   @db.Uuid
+  orderItemId    String?  @db.Uuid
+  externalId     String?
+  reason         String?
+  amount         Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  occurredAt     DateTime @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, orderId, externalId])
+  @@index([organizationId, restaurantId, branchId, occurredAt])
+  @@map("discounts")
+}
+
+model Refund {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  orderId        String   @db.Uuid
+  externalId     String
+  reason         String?
+  amount         Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  refundedAt     DateTime @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, externalId])
+  @@index([organizationId, restaurantId, branchId, refundedAt])
+  @@map("refunds")
+}
+
+model DeliveryCommission {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  orderId        String   @db.Uuid
+  salesChannelId String?  @db.Uuid
+  externalId     String?
+  rate           Decimal? @db.Decimal(9, 6)
+  amount         Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  chargedAt      DateTime @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, orderId, externalId])
+  @@index([organizationId, restaurantId, branchId, chargedAt])
+  @@map("delivery_commissions")
+}
+
+model OperatingCost {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  category       String
+  description    String?
+  amount         Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  incurredAt     DateTime @db.Timestamptz(3)
+  externalId     String?
+  sourceSystem   String?
+  importBatchId  String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, sourceSystem, externalId])
+  @@index([organizationId, restaurantId, branchId, incurredAt])
+  @@map("operating_costs")
+}
+
+model LaborCost {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String   @db.Uuid
+  roleName       String?
+  hours          Decimal? @db.Decimal(12, 4)
+  amount         Decimal  @db.Decimal(19, 4)
+  currency       String   @db.Char(3)
+  workDate       DateTime @db.Date
+  externalId     String?
+  sourceSystem   String?
+  importBatchId  String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, sourceSystem, externalId])
+  @@index([organizationId, restaurantId, branchId, workDate])
+  @@map("labor_costs")
+}
+
+model ImportJob {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  restaurantId   String       @db.Uuid
+  branchId       String?      @db.Uuid
+  type           ImportType
+  status         ImportStatus @default(PENDING)
+  requestedById  String       @db.Uuid
+  sourceSystem   String
+  startedAt      DateTime?    @db.Timestamptz(3)
+  completedAt    DateTime?    @db.Timestamptz(3)
+  rowCount       Int          @default(0)
+  acceptedCount  Int          @default(0)
+  rejectedCount  Int          @default(0)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, createdAt])
+  @@map("import_jobs")
+}
+
+model ImportFile {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  importJobId    String   @db.Uuid
+  storageKey     String   @unique
+  originalName   String
+  mediaType      String
+  sizeBytes      BigInt
+  sha256         String
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, sha256])
+  @@index([organizationId, restaurantId, importJobId])
+  @@map("import_files")
+}
+
+model ImportMapping {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  importJobId    String   @db.Uuid
+  sourceColumn   String
+  targetField    String
+  transform      Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, importJobId, sourceColumn])
+  @@index([organizationId, restaurantId, importJobId])
+  @@map("import_mappings")
+}
+
+model ImportRowError {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  importJobId    String   @db.Uuid
+  rowNumber      Int
+  field          String?
+  code           String
+  message        String
+  sourceData     Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, importJobId, rowNumber])
+  @@map("import_row_errors")
+}
+
+model ImportBatch {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  restaurantId   String       @db.Uuid
+  branchId       String?      @db.Uuid
+  importJobId    String       @db.Uuid
+  batchNumber    Int
+  status         ImportStatus @default(PENDING)
+  sourceStartRow Int
+  sourceEndRow   Int
+  checksum       String
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  completedAt    DateTime?    @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, importJobId, batchNumber])
+  @@unique([organizationId, restaurantId, importJobId, checksum])
+  @@index([organizationId, restaurantId, branchId, importJobId])
+  @@map("import_batches")
+}
+
+model ImportAudit {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  importJobId    String   @db.Uuid
+  actorId        String?  @db.Uuid
+  action         String
+  details        Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, importJobId, createdAt])
+  @@map("import_audits")
+}
+
+model MetricSnapshot {
+  id                 String            @id @default(uuid()) @db.Uuid
+  organizationId     String            @db.Uuid
+  restaurantId       String            @db.Uuid
+  branchId           String?           @db.Uuid
+  metricKey          String
+  periodStart        DateTime          @db.Timestamptz(3)
+  periodEnd          DateTime          @db.Timestamptz(3)
+  value              Decimal           @db.Decimal(19, 4)
+  currency           String?           @db.Char(3)
+  unit               String
+  dataQualityStatus  DataQualityStatus
+  calculationVersion String
+  evidence           Json
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, branchId, metricKey, periodStart, periodEnd, calculationVersion])
+  @@index([organizationId, restaurantId, branchId, periodEnd])
+  @@map("metric_snapshots")
+}
+
+model DetectedIssue {
+  id                String                   @id @default(uuid()) @db.Uuid
+  organizationId    String                   @db.Uuid
+  restaurantId      String                   @db.Uuid
+  branchId          String?                  @db.Uuid
+  metricSnapshotId  String?                  @db.Uuid
+  issueKey          String
+  title             String
+  description       String
+  estimatedImpact   Decimal?                 @db.Decimal(19, 4)
+  currency          String?                  @db.Char(3)
+  priority          RecommendationPriority
+  confidence        RecommendationConfidence
+  dataQualityStatus DataQualityStatus
+  detectedAt        DateTime                 @default(now()) @db.Timestamptz(3)
+  resolvedAt        DateTime?                @db.Timestamptz(3)
+  createdAt         DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, detectedAt])
+  @@map("detected_issues")
+}
+
+model Recommendation {
+  id              String                   @id @default(uuid()) @db.Uuid
+  organizationId  String                   @db.Uuid
+  restaurantId    String                   @db.Uuid
+  branchId        String?                  @db.Uuid
+  detectedIssueId String                   @db.Uuid
+  title           String
+  action          String
+  rationale       String
+  status          RecommendationStatus     @default(PROPOSED)
+  priority        RecommendationPriority
+  confidence      RecommendationConfidence
+  proposedAt      DateTime                 @default(now()) @db.Timestamptz(3)
+  targetDate      DateTime?                @db.Timestamptz(3)
+  completedAt     DateTime?                @db.Timestamptz(3)
+  createdAt       DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, status, priority])
+  @@map("recommendations")
+}
+
+model RecommendationEvidence {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  restaurantId     String   @db.Uuid
+  branchId         String?  @db.Uuid
+  recommendationId String   @db.Uuid
+  metricSnapshotId String?  @db.Uuid
+  label            String
+  value            Decimal? @db.Decimal(19, 4)
+  currency         String?  @db.Char(3)
+  unit             String?
+  description      String
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, recommendationId])
+  @@map("recommendation_evidence")
+}
+
+model RecommendationEvent {
+  id               String                @id @default(uuid()) @db.Uuid
+  organizationId   String                @db.Uuid
+  restaurantId     String                @db.Uuid
+  branchId         String?               @db.Uuid
+  recommendationId String                @db.Uuid
+  actorId          String?               @db.Uuid
+  fromStatus       RecommendationStatus?
+  toStatus         RecommendationStatus
+  details          Json?
+  createdAt        DateTime              @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, recommendationId, createdAt])
+  @@map("recommendation_events")
+}
+
+model RecommendationNote {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  restaurantId     String   @db.Uuid
+  branchId         String?  @db.Uuid
+  recommendationId String   @db.Uuid
+  authorId         String   @db.Uuid
+  body             String
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, recommendationId, createdAt])
+  @@map("recommendation_notes")
+}
+
+model OutcomeReview {
+  id                String            @id @default(uuid()) @db.Uuid
+  organizationId    String            @db.Uuid
+  restaurantId      String            @db.Uuid
+  branchId          String?           @db.Uuid
+  recommendationId  String            @db.Uuid
+  type              OutcomeReviewType
+  scheduledFor      DateTime          @db.Timestamptz(3)
+  reviewedAt        DateTime?         @db.Timestamptz(3)
+  baselineValue     Decimal?          @db.Decimal(19, 4)
+  resultValue       Decimal?          @db.Decimal(19, 4)
+  measuredImpact    Decimal?          @db.Decimal(19, 4)
+  currency          String?           @db.Char(3)
+  dataQualityStatus DataQualityStatus
+  notes             String?
+  createdAt         DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, restaurantId, recommendationId, type])
+  @@index([organizationId, restaurantId, branchId, scheduledFor])
+  @@map("outcome_reviews")
+}
+
+model AiConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String   @db.Uuid
+  branchId       String?  @db.Uuid
+  userId         String   @db.Uuid
+  title          String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, userId, createdAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  restaurantId     String   @db.Uuid
+  branchId         String?  @db.Uuid
+  conversationId   String   @db.Uuid
+  role             String
+  content          String
+  model            String?
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiToolExecution {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  restaurantId   String    @db.Uuid
+  branchId       String?   @db.Uuid
+  messageId      String    @db.Uuid
+  toolName       String
+  input          Json
+  output         Json?
+  succeeded      Boolean
+  errorCode      String?
+  startedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  completedAt    DateTime? @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, messageId])
+  @@map("ai_tool_executions")
+}
+
+model KnowledgeDocument {
+  id                String            @id @default(uuid()) @db.Uuid
+  organizationId    String            @db.Uuid
+  restaurantId      String?           @db.Uuid
+  branchId          String?           @db.Uuid
+  title             String
+  storageKey        String
+  mediaType         String
+  sha256            String
+  language          String
+  consentedAt       DateTime?         @db.Timestamptz(3)
+  dataQualityStatus DataQualityStatus
+  createdAt         DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, storageKey])
+  @@unique([organizationId, sha256])
+  @@index([organizationId, restaurantId, branchId])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  restaurantId   String?  @db.Uuid
+  branchId       String?  @db.Uuid
+  documentId     String   @db.Uuid
+  chunkIndex     Int
+  content        String
+  tokenCount     Int
+  metadata       Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([organizationId, documentId, chunkIndex])
+  @@index([organizationId, restaurantId, branchId, documentId])
+  @@map("knowledge_chunks")
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @db.Uuid
+  restaurantId   String?     @db.Uuid
+  branchId       String?     @db.Uuid
+  actorId        String?     @db.Uuid
+  action         AuditAction
+  entityType     String
+  entityId       String?     @db.Uuid
+  requestId      String?
+  ipAddress      String?
+  before         Json?
+  after          Json?
+  metadata       Json?
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model DataExportRequest {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  restaurantId   String?      @db.Uuid
+  branchId       String?      @db.Uuid
+  requestedById  String       @db.Uuid
+  status         ImportStatus @default(PENDING)
+  storageKey     String?
+  expiresAt      DateTime?    @db.Timestamptz(3)
+  completedAt    DateTime?    @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, createdAt])
+  @@map("data_export_requests")
+}
+
+model DataDeletionRequest {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  restaurantId   String?      @db.Uuid
+  branchId       String?      @db.Uuid
+  requestedById  String       @db.Uuid
+  status         ImportStatus @default(PENDING)
+  reason         String
+  approvedById   String?      @db.Uuid
+  approvedAt     DateTime?    @db.Timestamptz(3)
+  completedAt    DateTime?    @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([organizationId, restaurantId, branchId, createdAt])
+  @@map("data_deletion_requests")
 }
