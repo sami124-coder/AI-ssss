@@ -3,5 +3,8 @@ node_modules/
 dist/
 .env
 coverage/
-apps/api/src/generated/
+packages/database/src/generated/
 *.log
+playwright-report/
+test-results/
+.DS_Store

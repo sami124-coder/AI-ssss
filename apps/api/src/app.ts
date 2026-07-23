@@ -1,21 +1,29 @@
+import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import session from 'express-session';
-import type { Config } from './config.js';
-import { requireTenant, tenantFrom } from './tenant.js';
+import type { Logger } from 'pino';
+import type { ApiEnvironment } from './config.js';
+import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
+import { requestIdMiddleware } from './middleware/request-id.js';
+import { requestLoggerMiddleware } from './middleware/request-logger.js';
+import { healthRouter } from './routes/health.js';
 
-export function createApp(config: Pick<Config, 'NODE_ENV' | 'SESSION_SECRET'>, store?: session.Store) {
+export interface AppDependencies {
+  config: ApiEnvironment;
+  logger: Logger;
+}
+
+export function createApp({ config, logger }: AppDependencies) {
   const app = express();
   app.set('trust proxy', 1);
+  app.disable('x-powered-by');
   app.use(helmet());
+  app.use(cors({ origin: config.CORS_ORIGIN }));
+  app.use(requestIdMiddleware);
+  app.use(requestLoggerMiddleware(logger));
   app.use(express.json({ limit: '1mb' }));
-  const sessionOptions: session.SessionOptions = {
-    name: 'rda.sid', secret: config.SESSION_SECRET, resave: false, saveUninitialized: false,
-    ...(store ? { store } : {}),
-    cookie: { httpOnly: true, secure: config.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8 * 60 * 60 * 1000 },
-  };
-  app.use(session(sessionOptions));
-  app.get('/health', (_request, response) => response.json({ status: 'ok' }));
-  app.get('/api/context', requireTenant, (request, response) => response.json({ tenant: tenantFrom(request) }));
+  app.use('/health', healthRouter);
+  app.use(notFoundHandler);
+  app.use(errorHandler(logger));
   return app;
 }

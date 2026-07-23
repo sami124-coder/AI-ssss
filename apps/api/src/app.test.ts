@@ -1,13 +1,29 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { createLogger } from '@rda/config';
 import { createApp } from './app.js';
 
-const config = { NODE_ENV: 'test' as const, SESSION_SECRET: 'test-secret-that-is-at-least-32-characters' };
-describe('API security boundary', () => {
-  it('exposes health without authentication', async () => { await request(createApp(config)).get('/health').expect(200, { status: 'ok' }); });
-  it('does not accept tenant identity from request input', async () => {
-    const result = await request(createApp(config)).get('/api/context?organizationId=attacker').set('x-organization-id', 'attacker');
-    expect(result.status).toBe(401);
-    expect(result.text).toBe('{"error":"authentication_required"}');
+const config = {
+  NODE_ENV: 'test' as const,
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/restaurant_decision_ai',
+  PORT: 3000,
+  LOG_LEVEL: 'silent' as const,
+  CORS_ORIGIN: 'http://localhost:5173',
+};
+
+const app = createApp({ config, logger: createLogger(config) });
+
+describe('API foundation', () => {
+  it('returns health information and a request ID', async () => {
+    const result = await request(app).get('/health').expect(200);
+    expect(result.body).toMatchObject({ status: 'ok', service: 'restaurant-decision-api' });
+    expect(result.headers['x-request-id']).toEqual(expect.any(String));
+  });
+
+  it('returns a structured error for unknown routes', async () => {
+    const result = await request(app).get('/missing').expect(404);
+    expect(result.body).toMatchObject({
+      error: { code: 'not_found', message: 'Route not found' },
+    });
   });
 });

@@ -1,16 +1,19 @@
 import 'dotenv/config';
-import connectPgSimple from 'connect-pg-simple';
-import session from 'express-session';
-import pg from 'pg';
+import { createLogger } from '@rda/config';
 import { createApp } from './app.js';
-import { readConfig } from './config.js';
+import { readApiEnvironment } from './config.js';
 
-const config = readConfig();
-const pool = new pg.Pool({ connectionString: config.DATABASE_URL });
-const PgStore = connectPgSimple(session);
-const store = new PgStore({ pool, createTableIfMissing: true });
-const app = createApp(config, store);
-const server = app.listen(config.PORT, () => process.stdout.write(`API listening on ${config.PORT}\n`));
-const shutdown = () => server.close(() => void pool.end());
+const config = readApiEnvironment();
+const logger = createLogger(config);
+const app = createApp({ config, logger });
+const server = app.listen(config.PORT, () => {
+  logger.info({ port: config.PORT }, 'API listening');
+});
+const shutdown = () => {
+  server.close(() => {
+    logger.info('API stopped');
+    process.exit(0);
+  });
+};
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
