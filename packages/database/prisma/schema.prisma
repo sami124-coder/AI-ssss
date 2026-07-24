@@ -144,6 +144,8 @@ model User {
   displayName  String
   locale       String    @default("en")
   isActive     Boolean   @default(true)
+  failedLoginAttempts Int @default(0)
+  lockedUntil  DateTime? @db.Timestamptz(3)
   lastLoginAt  DateTime? @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
@@ -192,6 +194,7 @@ model Session {
   tokenHash      String   @unique
   expiresAt      DateTime @db.Timestamptz(3)
   lastSeenAt     DateTime @default(now()) @db.Timestamptz(3)
+  revokedAt      DateTime? @db.Timestamptz(3)
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([organizationId, userId])

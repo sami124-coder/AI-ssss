@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { requestLoggerMiddleware } from './middleware/request-logger.js';
 import { healthRouter } from './routes/health.js';
+import { authRouter } from './routes/auth.js';
 
 export interface AppDependencies {
   config: ApiEnvironment;
@@ -23,6 +24,7 @@ export function createApp({ config, logger }: AppDependencies) {
   app.use(requestLoggerMiddleware(logger));
   app.use(express.json({ limit: '1mb' }));
   app.use('/health', healthRouter);
+  app.use('/auth', authRouter(logger));
   app.use(notFoundHandler);
   app.use(errorHandler(logger));
   return app;
